@@ -70,6 +70,7 @@ function ringGeometry(rings, cols, domeStart = 0, domeEnd = 0) {
 function build3D(sel, o = {}) {
   if (typeof sel === 'string') sel = { head: sel, neck: sel, body: sel, tail: sel };
   const M = assemble(sel), k = U * (o.size ?? SIZE[sel.body] ?? 1), S = M.S, seg = 14;
+  if (o.pal) for (const t of ['tail', 'body', 'neck', 'head']) M.partPal[t] = { ...M.partPal[t], ...(o.pal[sel[t]] || {}) };
   const wf = WIDTH[sel.body] ?? 0.95, wfHead = WIDTH[sel.head] ?? 0.95;
   const pal = tag => { const p = M.partPal[tag === 'neck' ? 'neck' : tag]; return { side: lc(p.side), back: lc(p.back), belly: lc(p.belly), stripe: lc(p.stripe) }; };
   const P3 = (x, y, z = 0) => [x * k, -y * k, z * k];
@@ -90,7 +91,7 @@ function build3D(sel, o = {}) {
       c.lerp(pl.belly, sstep(0.0, -0.75, cu) * 0.85);
       c.lerp(pl.back, sstep(0.25, 0.95, cu) * 0.7);
       if (q.tag !== 'head' && cu > 0.1 && ((arc[i] / 11) % 1) < 0.38) c.lerp(pl.stripe, 0.5 * sstep(0.1, 0.7, cu));
-      c.multiplyScalar(0.94 + hash3(i, j, 1) * 0.12);
+      if (!o.flat) c.multiplyScalar(0.94 + hash3(i, j, 1) * 0.12);
       cs.push(c);
     }
     return [pts, cs];
@@ -189,6 +190,16 @@ function build3D(sel, o = {}) {
   const eyeQ = (() => { let best = S[R.head[0]]; const ex = hb.x + Hd.eye[0]; for (let i = R.head[0]; i <= R.head[1]; i++) if (Math.abs(S[i].x - ex) < Math.abs(best.x - ex)) best = S[i]; return best; })();
   const eyeZ = (eyeQ.t + eyeQ.b) / 2 * widthAt(eyeQ) * 0.82;
   const eyeMat = Hd.mouth === 'teeth' ? new THREE.MeshStandardMaterial({ color: lc('#d89a2a'), emissive: lc('#3a2200'), roughness: 0.3 }) : EYE_MAT;
+  if (o.eyes === 'cartoon') {
+    const white = new THREE.MeshStandardMaterial({ color: lc('#fbf6ec') }), brow = new THREE.MeshStandardMaterial({ color: lc(mix(HP.back || HP.side, '#000000', 0.25)) });
+    for (const zs of [-1, 1]) {
+      const e = put(new THREE.Mesh(new THREE.SphereGeometry(3.2 * hs * k, 14, 10), white), 'head', hb.x + Hd.eye[0], hb.y + Hd.eye[1] - 0.5, zs * eyeZ * 0.92);
+      const pu = new THREE.Mesh(new THREE.SphereGeometry(1.8 * hs * k, 10, 8), EYE_MAT); pu.position.copy(e.position).add(new THREE.Vector3(1.0 * hs * k, -0.2 * hs * k, zs * 2.0 * hs * k)); e.parent.add(pu);
+      const gl = new THREE.Mesh(new THREE.SphereGeometry(0.7 * hs * k, 8, 6), GLINT_MAT); gl.position.copy(pu.position).add(new THREE.Vector3(0.6 * hs * k, 0.7 * hs * k, zs * 1.2 * hs * k)); e.parent.add(gl);
+      e.userData.voxPrio = 1; pu.userData.voxPrio = 2; gl.userData.voxPrio = 3; e.userData.noShadow = pu.userData.noShadow = gl.userData.noShadow = true;
+      if (Hd.mouth === 'teeth') { const b = new THREE.Mesh(new THREE.BoxGeometry(6.6 * hs * k, 1.5 * hs * k, 2.6 * hs * k), brow); b.position.copy(e.position).add(new THREE.Vector3(0.2 * hs * k, 3.0 * hs * k, zs * 0.6 * hs * k)); b.rotation.z = -0.36; e.parent.add(b); b.userData.voxPrio = 2; }
+    }
+  } else
   for (const zs of [-1, 1]) { // white, pupil and glint sit side by side on the head so both eyes merge into three meshes
     const e = put(new THREE.Mesh(new THREE.SphereGeometry(2.4 * hs * k, 10, 8), eyeMat), 'head', hb.x + Hd.eye[0], hb.y + Hd.eye[1], zs * eyeZ);
     const pu = new THREE.Mesh(new THREE.SphereGeometry(1.3 * hs * k, 8, 6), EYE_MAT); pu.position.copy(e.position).add(new THREE.Vector3(0.4 * hs * k, 0, zs * 1.4 * hs * k)); pu.scale.set(0.5, 1, 1); e.parent.add(pu);
@@ -198,12 +209,12 @@ function build3D(sel, o = {}) {
   if (Hd.mouth === 'teeth') {
     const [ha, hz] = R.head;
     for (let i = ha + Math.round((hz - ha) * 0.25); i < hz - 1; i += 2) { const q = S[i], my = q.y + q.b * 0.55, w = (q.t + q.b) / 2 * widthAt(q) * 0.8;
-      for (const zs of [-1, 1]) { const tth = new THREE.Mesh(new THREE.ConeGeometry(0.9 * hs * k, 3 * hs * k, 5), TOOTH_MAT); put(tth, 'head', q.x, my, zs * w); tth.rotation.z = Math.PI; } }
+      for (const zs of [-1, 1]) { const tth = new THREE.Mesh(new THREE.ConeGeometry(0.9 * hs * k, 3 * hs * k, 5), TOOTH_MAT); put(tth, 'head', q.x, my, zs * w); tth.rotation.z = Math.PI; tth.userData.voxPrio = 1; } }
   }
   // markers for gameplay: snout tip and body centre
   const sn = S[S.length - 1], snout = new THREE.Object3D(); snout.name = 'snout'; put(snout, 'head', sn.x + sn.dx * 3, sn.y);
   const bodyC = new THREE.Object3D(); bodyC.name = 'bodyC'; const bc = S[Math.round((R.body[0] + R.body[1]) / 2)]; bodyC.position.set(bc.x * k, -bc.y * k, 0); body.add(bodyC);
-  mergeStatic(root);
+  if (!o.noMerge) mergeStatic(root);
   root.traverse(o => { if (o.isMesh) { o.castShadow = !o.userData.noShadow; o.geometry.userData.shared = true; } });
   // eating pose: how far the neck must bend to bring the snout near the ground
   const snoutRel = new THREE.Vector2((sn.x - nb.x) * k, -(sn.y - nb.y) * k), pivotH = -nb.y * k;
@@ -280,11 +291,31 @@ function updateDino(D, dt, speed, state) {
   if (D.dead > 0) { D.root.rotation.x = lerp(0, -1.35, sstep(0, 1, D.dead)); }
 }
 
+/* voxel colours: brighter, clearer palettes than the painted ones */
+const VOX_PAL = {
+  trex: { side: '#d8603e', back: '#93361f', belly: '#f6d6a2', stripe: '#86301c' }, stego: { side: '#6eb85a', back: '#2f7a4c', belly: '#efe2a2', stripe: '#2c6a40', plate: '#f08a3d', plate2: '#ffc25a' },
+  bronto: { side: '#7f92de', back: '#4856a8', belly: '#dde2fb', stripe: '#424fa0' }, trike: { side: '#5aa8d6', back: '#2c5f8a', belly: '#e6f2fc', stripe: '#2c5f8a', frill: '#f07a5a', frill2: '#ffd05a' },
+  allo: { side: '#e39a40', back: '#9a5422', belly: '#fbe0ae', stripe: '#8a4618' }, coelo: { side: '#9acf4e', back: '#4f8a26', belly: '#eef4c0', stripe: '#3f7a1e' },
+  para: { side: '#eec450', back: '#c0782a', belly: '#fbf0c8', stripe: '#b2621e', crest: '#e2503c' }, anky: { side: '#b88e5c', back: '#704a2a', belly: '#eedab4', stripe: '#5a3a1e' },
+  diplo: { side: '#8cc5a6', back: '#3e8a6a', belly: '#e8fbee', stripe: '#3a7a5a' }, iguano: { side: '#7fbe68', back: '#3f803a', belly: '#eeeec0', stripe: '#366e30' },
+  deino: { side: '#5a78d6', back: '#2a408a', belly: '#dee6fb', stripe: '#24367a' }, pachy: { side: '#c48ad6', back: '#7a4a8e', belly: '#f4e2fb', stripe: '#6a3a7e', dome: '#f8ae7a' },
+  brachio: { side: '#a0c66a', back: '#5a8a3a', belly: '#f0f4d6', stripe: '#4f7a30' }, spino: { side: '#4eae9e', back: '#206a64', belly: '#e6fbf2', stripe: '#1a5a54', sail: '#f06a4a', sail2: '#ffbe4a' },
+  proto: { side: '#e6b660', back: '#a8742a', belly: '#fbf0d0', stripe: '#946426', frill: '#f08a5a', frill2: '#ffd07a' }, cory: { side: '#6aaedc', back: '#2f6aa0', belly: '#e8f4fb', stripe: '#2a5a8a', dome: '#f06a5a', crest: '#f06a5a' },
+  galli: { side: '#e4cc70', back: '#a88a30', belly: '#fbf6d6', stripe: '#987a26' }, edmonto: { side: '#78b6c6', back: '#3a7a8a', belly: '#ecf8fb', stripe: '#336a7a' },
+};
+/* a dinosaur made of small cubes: the smooth rig is built, then turned into voxels joint by joint */
+function dinoModel(sel, o = {}) {
+  const body = typeof sel === 'string' ? sel : sel.body, size = o.size ?? SIZE[body] ?? 1;
+  const D = build3D(sel, { ...o, eyes: 'cartoon', pal: VOX_PAL, noMerge: true, flat: true });
+  voxelize(D.root, 0.058 + 0.03 * size);
+  D.root.traverse(ob => { if (ob.isMesh) ob.geometry.userData.shared = true; });
+  return D;
+}
 /* cheap copies: share geometry and materials, re-find the joints by name */
 const _protos = {};
+function dinoProto(sel) { const key = typeof sel === 'string' ? sel : JSON.stringify(sel); return _protos[key] || (_protos[key] = dinoModel(sel)); }
 function dinoInstance(sel) {
-  const key = typeof sel === 'string' ? sel : JSON.stringify(sel);
-  const P = _protos[key] || (_protos[key] = build3D(sel));
+  const P = dinoProto(sel);
   const root = P.root.clone(true), D = { ...P, root };
   D.body = root.getObjectByName('body'); D.tailPivot = root.getObjectByName('tail'); D.neckPivot = root.getObjectByName('neck');
   D.snout = root.getObjectByName('snout'); D.bodyC = root.getObjectByName('bodyC');

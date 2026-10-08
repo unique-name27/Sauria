@@ -29,10 +29,10 @@ let renderer, camera, titleW, showcase, museum;
 function initRenderer() {
   const canvas = $('gl');
   renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
-  renderer.outputEncoding = THREE.sRGBEncoding; renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.0;
+  renderer.outputEncoding = THREE.sRGBEncoding; renderer.toneMapping = THREE.NoToneMapping;
   renderer.shadowMap.enabled = !G.fast; renderer.shadowMap.type = THREE.PCFShadowMap;
   camera = new THREE.PerspectiveCamera(55, 1, 0.1, 1500);
-  setPerfCap(); PERF.ratio = PERF.cap;
+  setPerfCap(); PERF.ratio = PERF.cap; VOX_LOD.scale = G.fast ? 0.6 : 1;
   const resize = () => { const app = $('app'), w = app.clientWidth, h = app.clientHeight; renderer.setPixelRatio(PERF.ratio); renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix(); };
   window.addEventListener('resize', resize); resize();
 }
@@ -42,7 +42,7 @@ const PERF = { cap: 1, ratio: 1, floor: 0.5, acc: 0, n: 0, good: 0, ceil: Infini
 function setPerfCap() {
   const dpr = window.devicePixelRatio || 1, touch = window.matchMedia && matchMedia('(pointer: coarse)').matches;
   PERF.cap = G.fast ? Math.min(dpr, 1) * 0.8 : Math.min(dpr, touch ? 1.25 : 1.5);
-  PERF.floor = Math.min(PERF.cap, 0.5);
+  PERF.floor = Math.min(PERF.cap, Math.max(0.75, PERF.cap * 0.6)); // never so low that the voxels blur
 }
 function setRatio(r) { if (Math.abs(r - PERF.ratio) < 0.01) return; PERF.ratio = r; renderer.setPixelRatio(r); }
 function perfSample(ms, active) {
@@ -64,6 +64,7 @@ function perfSample(ms, active) {
 }
 /* Fast graphics: no shadows and a lower resolution, for slow machines */
 function applyGraphics() {
+  VOX_LOD.scale = G.fast ? 0.6 : 1;
   setPerfCap(); PERF.ceil = Infinity; PERF.judge = null; setRatio(PERF.cap);
   renderer.shadowMap.enabled = !G.fast;
   const scenes = [titleW, showcase, museum].filter(Boolean).map(o => o.scene).concat(G.run ? G.run.areas.filter(Boolean).map(a => a.scene) : []);
@@ -114,18 +115,7 @@ function goTitle() {
 }
 
 /* ---- choose a dinosaur ---- */
-function buildShowcase() {
-  const scene = new THREE.Scene(), B = BIOMES[0];
-  scene.fog = new THREE.FogExp2(lc('#cfdfcc'), 0.012); skyDome(B, scene);
-  scene.add(new THREE.HemisphereLight(lc('#dcefff'), lc('#4a5a30'), 0.7));
-  const sun = new THREE.DirectionalLight(lc('#fff1d0'), 2.0); sun.position.set(12, 20, 10); sun.castShadow = true; sun.shadow.mapSize.set(2048, 2048); Object.assign(sun.shadow.camera, { left: -15, right: 15, top: 15, bottom: -15, far: 80 }); scene.add(sun);
-  const ground = new THREE.Mesh(new THREE.CircleGeometry(200, 48), new THREE.MeshStandardMaterial({ color: lc('#5a7a3e'), roughness: 1 })); ground.rotation.x = -Math.PI / 2; ground.receiveShadow = true; scene.add(ground);
-  const plat = new THREE.Mesh(new THREE.CylinderGeometry(7, 7.4, 0.5, 64), new THREE.MeshStandardMaterial({ color: lc('#7a6a50'), roughness: 0.8 })); plat.position.y = 0.25; plat.receiveShadow = true; scene.add(plat);
-  const r = rng(5), list = n => Array.from({ length: n }, () => { const a = Math.PI * (1.05 + r() * 0.9), d = 18 + r() * 50; return { x: Math.cos(a) * d, z: Math.sin(a) * d - 6, y: 0, rot: r() * 3, s: 0.7 + r() * 0.6 }; });
-  trees3D(scene, 'araucaria', { trunk: '#5a4632', leaf: '#3a6048' }, list(60));
-  scatter(scene, foliageTex('fern'), 2.6, 2.6, Array.from({ length: 140 }, () => { const a = r() * TAU, d = 8 + r() * 20; return { x: Math.cos(a) * d, z: Math.sin(a) * d, y: 0, rot: r() * 3, s: 0.6 + r() }; }), { quads: 3 });
-  return { scene, plat, D: null, key: null, spin: 0.6 };
-}
+function buildShowcase() { return buildShowcaseScene(); }
 function chooseOptions() {
   const base = [{ id: 'stego', sel: 'stego', name: 'Stegosaurus', eats: 'Eats plants' }, { id: 'bronto', sel: 'bronto', name: 'Brontosaurus', eats: 'Eats plants' }, { id: 'trex', sel: 'trex', name: 'Tyrannosaurus rex', eats: 'Eats other dinosaurs' }];
   for (const d of G.designs.slice(-4)) base.push({ id: 'd:' + d.name, sel: { head: d.head, neck: d.body, body: d.body, tail: d.tail }, design: d, name: d.name, eats: d.head === 'trex' ? 'Eats other dinosaurs' : 'Eats plants' });
@@ -175,7 +165,7 @@ function areaState(i) {
     A.preyTimer = 4; R.areas[i] = A;
     if (!R.meat) for (let k = 0; k < (i === 3 || i === 4 ? 1 : 2); k++) spawnNPC(A, 'grazer', GRAZERS[(i + k) % GRAZERS.length]);
     // build the models that appear mid-walk now, during the fade, so they don't stall the game later
-    for (const sp of R.meat ? PREY : A.hasPredator ? [PREDATORS[i] || 'allo'] : []) if (!_protos[sp]) _protos[sp] = build3D(sp);
+    for (const sp of R.meat ? PREY : A.hasPredator ? [PREDATORS[i] || 'allo'] : []) dinoProto(sp);
   }
   return R.areas[i];
 }
@@ -385,7 +375,7 @@ function goBuild() {
 function rebuildHybrid() {
   if (BUILD.D) museum.scene.remove(BUILD.D.root);
   const sel = { head: BUILD.head, neck: BUILD.body, body: BUILD.body, tail: BUILD.tail };
-  BUILD.D = build3D(sel, { size: 1.0 }); BUILD.D.root.position.set(4, 0.6, -1); museum.scene.add(BUILD.D.root);
+  BUILD.D = dinoModel(sel, { size: 1.0 }); BUILD.D.root.position.set(4, 0.6, -1); museum.scene.add(BUILD.D.root);
   const s = survival(BUILD);
   $('surv-pct').textContent = s.pct + '%'; $('surv-ring').style.setProperty('--p', s.pct);
   const lines = [...s.good.map(t => '✓ ' + t), ...s.bad.map(t => '✗ ' + t)];

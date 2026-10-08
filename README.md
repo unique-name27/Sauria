@@ -2,9 +2,10 @@
 
 A 3D, third-person remake of **Designasaurus**, the 1987 dinosaur game, in which the
 original's three activities and their rules carry over unchanged and only the graphics
-are new. It runs in the browser on [three.js](https://threejs.org/) r128, and everything
-else (models, plants, skies, sound and print layouts) is generated in code. There are no
-image or model files.
+are new. The world and its dinosaurs are built from small voxels: the ground is a grid of
+quarter-size blocks, and each dinosaur is made of cubes about a tenth of a unit wide. It runs
+in the browser on [three.js](https://threejs.org/) r128, and everything else (voxel models,
+plants, skies, sound and print layouts) is generated in code. There are no image or model files.
 
 ## The three activities
 
@@ -40,7 +41,8 @@ or as line art for colouring in. The output is a PDF.
 | Mute | M | Pause menu |
 
 The pause menu has two options: *walk only while holding the mouse button* and *Fast
-graphics*, which turns off shadows and lowers the resolution for slow machines.
+graphics*, which turns off shadows, lowers the resolution and shortens the view distance for
+slow machines.
 
 ## Run it
 
@@ -75,10 +77,11 @@ Screenshots and a sample PDF are written to `test-output/`. If you're offline, s
 src/page.html   markup, styles and all screens (HUD, pause, game over, Hall of Fame, museum, print desk)
 src/lib.js      2D canvas painting helpers (noise, plants, rocks, UI chips)
 src/dino.js     18 species as spline skeletons, plus the 2D renderer used for pictures, thumbnails and prints
+src/vox.js      voxel engine: voxel sets, meshing with corner shading, voxelizing jointed models, terrain
 src/art.js      2D props (bushes, paleontologist, filing cabinet)
 src/world.js    2D habitat backdrops and head crops for portraits
-src/d3.js       turns a species (or a head/body/tail hybrid) into a rigged 3D model; walk/eat/attack animation
-src/env3d.js    the five 3D screens, the title valley and the museum lab
+src/d3.js       turns a species (or a head/body/tail hybrid) into a rigged 3D model, then into voxels joint by joint; walk/eat/attack animation
+src/env3d.js    the five voxel screens, the title valley, the choose stage and the museum lab
 src/print.js    species facts, survival scoring, print page layouts and a small PDF writer
 src/audio.js    synthesized sound effects and ambience (Web Audio)
 src/game3d.js   game state, input, Walk/Build/Print logic, camera and the main loop
@@ -86,20 +89,31 @@ build.js        bundler: src/ -> dist/
 tests/          Playwright checks and the benchmark
 ```
 
+## How the voxels are built
+
+- **Dinosaurs**: each species is first built as a smooth jointed model from its 2D spine
+  rig. The model is then sampled into voxels separately for every joint (body, neck, tail,
+  each leg segment), so the voxel dinosaur still walks, grazes and bites. Hybrids from
+  Build Dino go through the same steps.
+- **Ground**: the ground is made of columns of 0.25-unit blocks near the path, 0.5-unit
+  blocks on the valley walls and 1.5-unit blocks on the distant ranges. Columns with the
+  same height and type are merged into larger faces, so flat ground costs little to draw.
+  A shader varies each block's shade and adds rock strata on cliffs.
+- **Plants, trees and rocks**: these are voxel models built once, then instanced in slices
+  along the valley. Each slice is drawn at full detail up close, at half resolution further
+  away, and not at all past the fog.
+- **Shading**: every cube corner is darkened by the blocks around it (ambient occlusion),
+  and the sun casts real shadows.
+
 ## Performance notes
 
-- three r128 never frustum-culls an `InstancedMesh`. To work around that, plants, trees and
-  rocks are split into slices along the valley, each with its own bounding sphere, so
-  off-screen slices are skipped in both the main pass and the shadow pass.
-- Plants use per-vertex Lambert lighting, which is cheap for overlapping alpha-tested cards.
-- The fixed parts of each dinosaur (plates, spikes, teeth, toes, eyes) are merged into one
-  mesh per joint and material. That's about 15–24 draw calls per dinosaur, down from up to 56.
-- Shadows use PCF, not PCF-soft, which takes half the texture reads per pixel.
-- Adaptive resolution: if frames take longer than ~21 ms, the render scale drops; when
-  there's headroom, it climbs back up. If dropping doesn't help (for example, on a device
-  capped at 30 fps), the controller undoes the drop.
-- Models that appear partway through a walk are built while the screen is faded out, so
-  they don't cause a hitch when they arrive.
+- three r128 never frustum-culls an `InstancedMesh`, so props are split into slices with
+  their own bounds, and off-screen slices are skipped in the main and shadow passes.
+- Everything is opaque. There are no alpha-tested plant cards, so there is little overdraw.
+- Shadows use PCF, not PCF-soft.
+- Adaptive resolution: if frames take longer than ~21 ms, the render scale drops, but not
+  below 0.75 so the voxels stay crisp. When there's headroom, it climbs back up.
+- Models that appear partway through a walk are built while the screen is faded out.
 
 ## Differences from the original
 
