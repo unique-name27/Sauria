@@ -1,0 +1,15 @@
+{
+  "name": "sauria",
+  "version": "1.0.0",
+  "private": true,
+  "description": "A 3D third-person remake of Designasaurus: Walk Dino, Build Dino and Print Dino.",
+  "scripts": {
+    "build": "node build.js",
+    "test": "node build.js && node tests/logic.test.js && node tests/mobile.test.js",
+    "bench": "node build.js && node tests/bench.js"
+  },
+  "devDependencies": {
+    "playwright": "^1.47.0",
+    "three": "0.128.0"
+  }
+}

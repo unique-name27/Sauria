@@ -1,0 +1,351 @@
+<title>Sauria</title>
+<meta name="description" content="A 3D remake of Designasaurus: Walk Dino, Build Dino and Print Dino.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500;700&family=Instrument+Sans:ital,wght@0,500;0,600;0,700;1,500;1,700&family=Unbounded:wght@700;800;900&display=swap">
+<style>
+/* Layout: a full-window 3D view with glass overlays; one deliberate dark game look (the Print desk is a light paper surface). */
+:root {
+  --bg: #0e0d0b;
+  --panel: rgba(18, 18, 14, 0.62);
+  --panel-solid: #1c1a16;
+  --line: rgba(255, 248, 230, 0.18);
+  --fg: #fff8ec;
+  --muted: #d6c9b0;
+  --amber: #f0aa4a;
+  --walk: #93cc72;
+  --build: #6cc8ec;
+  --danger: #ff8a6a;
+  --paper: #f3eee4;
+  --paper-ink: #1d1a15;
+  --paper-muted: #6f6553;
+  --font-d: "Unbounded", "Arial Black", Impact, sans-serif;
+  --font-b: "Instrument Sans", "Helvetica Neue", Arial, sans-serif;
+  --font-m: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { height: 100%; }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 500 16px/1.45 var(--font-b); overflow: hidden; -webkit-font-smoothing: antialiased; }
+#app { position: fixed; inset: 0; overflow: hidden; }
+#gl { display: block; width: 100%; height: 100%; touch-action: none; }
+#ui { position: absolute; inset: 0; pointer-events: none; }
+.screen { position: absolute; inset: 0; padding: max(16px, env(safe-area-inset-top, 0px)) 16px max(16px, env(safe-area-inset-bottom, 0px)); }
+.panel, button, input, label, .pick, .part, .pic, select { pointer-events: auto; }
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 18px; backdrop-filter: blur(14px) saturate(1.2); -webkit-backdrop-filter: blur(14px) saturate(1.2); box-shadow: 0 18px 40px -18px rgba(0,0,0,.6); }
+button { font: 700 16px/1 var(--font-b); color: var(--fg); background: rgba(255,255,255,.1); border: 1px solid var(--line); border-radius: 14px; padding: 12px 18px; cursor: pointer; transition: background .15s, transform .1s, border-color .15s; }
+button:hover { background: rgba(255,255,255,.18); }
+button:active { transform: translateY(1px); }
+button:focus-visible, input:focus-visible { outline: 3px solid var(--amber); outline-offset: 2px; }
+button.primary { background: var(--walk); color: #10201a; border-color: transparent; }
+button.primary:hover { background: #a6da86; }
+button.amber { background: var(--amber); color: #2a1a08; border-color: transparent; }
+button.amber:hover { background: #f6bb66; }
+button:disabled { opacity: .6; cursor: progress; }
+input[type=text] { font: 600 20px var(--font-b); color: var(--fg); background: rgba(255,255,255,.08); border: 1.5px solid var(--line); border-radius: 12px; padding: 10px 14px; width: 100%; }
+.eyebrow { font: 700 12px/1 var(--font-m); letter-spacing: .16em; text-transform: uppercase; color: var(--muted); margin: 0 0 8px; }
+h1, h2, h3 { margin: 0; text-wrap: balance; }
+.display { font: 800 clamp(22px, 3vw, 34px)/1.05 var(--font-d); letter-spacing: .06em; text-transform: uppercase; }
+.logo { font: 900 clamp(52px, 11vw, 150px)/0.95 var(--font-d); letter-spacing: .08em; background: linear-gradient(180deg, #fff8e6 10%, #ffd99a 52%, #e8873f 100%); -webkit-background-clip: text; background-clip: text; color: transparent; filter: drop-shadow(0 10px 30px rgba(20,6,10,.6)); text-align: center; }
+
+/* loading */
+#s-loading { display: grid; place-items: center; background: radial-gradient(ellipse at 50% 60%, #3a2236, #120c12 70%); }
+.load { text-align: center; width: min(420px, 90%); }
+.loadbar { height: 8px; border-radius: 4px; background: rgba(255,255,255,.12); margin: 24px 0 12px; overflow: hidden; }
+.loadbar i { display: block; height: 100%; width: 0; background: var(--amber); transition: width .3s; }
+
+/* title */
+#s-title { display: flex; flex-direction: column; align-items: center; justify-content: space-between; padding-top: max(7vh, 24px); padding-bottom: max(5vh, 20px); }
+.title-top { text-align: center; }
+.sub { font: 600 clamp(15px, 1.6vw, 22px) var(--font-b); color: #ffe6c4; text-shadow: 0 2px 10px rgba(0,0,0,.6); margin: 10px 0 0; }
+.menu { display: flex; gap: 16px; flex-wrap: wrap; justify-content: center; }
+.menu button { display: flex; align-items: center; gap: 12px; font-size: clamp(18px, 1.8vw, 24px); padding: 20px 28px; border-radius: 20px; background: rgba(24,14,20,.55); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); min-width: 230px; justify-content: center; }
+.menu button svg { width: 28px; height: 28px; }
+.menu button:hover { border-color: var(--amber); background: rgba(40,22,26,.7); }
+.controls-note { font: 500 13px var(--font-m); color: rgba(255,240,220,.75); text-align: center; text-shadow: 0 1px 6px rgba(0,0,0,.8); max-width: 70ch; }
+
+/* choose */
+#s-choose { display: grid; grid-template-rows: auto 1fr auto; gap: 12px; }
+.choose-head { max-width: 560px; padding: 18px 22px; }
+.choose-head p { margin: 6px 0 0; color: var(--muted); }
+.choose-desc { justify-self: end; align-self: start; max-width: 380px; padding: 18px 22px; font-size: 15px; color: var(--fg); }
+.choose-bottom { display: flex; flex-wrap: wrap; gap: 12px; align-items: end; justify-content: space-between; }
+#choose-list { display: flex; gap: 10px; overflow-x: auto; padding: 10px; max-width: 100%; }
+.pick { flex: none; width: 196px; display: grid; gap: 4px; text-align: left; padding: 10px; border-radius: 16px; background: rgba(18,22,18,.66); }
+.pick img { width: 100%; height: auto; background: rgba(255,255,255,.06); border-radius: 10px; }
+.pick b { font-size: 16px; }
+.pick span { font: 500 13px var(--font-b); color: var(--muted); }
+.pick.on { border: 2px solid #fff; background: rgba(30,40,30,.8); }
+.choose-actions { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; padding: 14px 16px; }
+.seg { display: inline-flex; gap: 6px; align-items: center; }
+.seg button { padding: 10px 16px; font-family: var(--font-m); }
+.seg button.on { background: #fff; color: #10201a; }
+.seg-label { font: 700 12px var(--font-m); letter-spacing: .14em; color: var(--muted); margin-right: 4px; }
+
+/* hud */
+.hud-tl { position: absolute; top: max(16px, env(safe-area-inset-top, 0px)); left: 16px; display: flex; gap: 14px; align-items: center; padding: 12px 18px 12px 12px; width: min(440px, calc(100% - 140px)); }
+.hud-tl img { width: 64px; height: 64px; border-radius: 50%; border: 2px solid rgba(255,255,255,.5); flex: none; }
+.hud-tl .stack { flex: 1; min-width: 0; }
+.hud-tl b { display: block; font-size: 19px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cal { display: flex; align-items: center; gap: 10px; margin-top: 6px; }
+.cal small { font: 700 11px var(--font-m); letter-spacing: .14em; color: var(--muted); }
+.calbar { flex: 1; height: 14px; border-radius: 7px; background: rgba(255,255,255,.14); overflow: hidden; }
+.calbar i { display: block; height: 100%; width: 80%; background: linear-gradient(90deg, #6fae52, #b9e58e); border-radius: 7px; transition: width .2s; }
+.calbar i.mid { background: linear-gradient(90deg, #d79a2e, #ffd36a); }
+.calbar i.low { background: linear-gradient(90deg, #c84a3a, #ff8a6a); box-shadow: 0 0 12px #ff6a4a; }
+#hud-calnum { font: 700 14px var(--font-m); min-width: 3ch; text-align: right; font-variant-numeric: tabular-nums; }
+.hud-tc { position: absolute; top: max(16px, env(safe-area-inset-top, 0px)); left: 50%; transform: translateX(-50%); padding: 10px 18px; text-align: center; }
+.hud-tc .row { font: 700 13px var(--font-m); letter-spacing: .12em; text-transform: uppercase; white-space: nowrap; }
+#hud-steps { display: flex; gap: 6px; justify-content: center; margin-top: 8px; }
+#hud-steps i { width: 34px; height: 7px; border-radius: 4px; background: rgba(255,255,255,.2); }
+#hud-steps i.done { background: rgba(255,255,255,.8); }
+#hud-steps i.now { background: #ffd36a; }
+.hud-tr { position: absolute; top: max(16px, env(safe-area-inset-top, 0px)); right: 16px; display: flex; gap: 8px; }
+.hud-tr button { background: var(--panel); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); }
+#hud-hint { position: absolute; left: 50%; bottom: max(22px, env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); padding: 12px 18px; font-weight: 600; width: max-content; max-width: min(640px, calc(100vw - 32px)); text-align: center; }
+#hud-exit { position: absolute; left: 50%; top: 104px; transform: translateX(-50%); padding: 8px 14px; font: 700 13px var(--font-m); letter-spacing: .06em; color: #fff2c8; }
+#loadmsg { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); padding: 12px 20px; font: 700 14px var(--font-m); }
+
+/* dialogs */
+.dialog { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(520px, calc(100% - 32px)); padding: 26px; display: grid; gap: 14px; }
+.dialog p { margin: 0; color: var(--muted); }
+.actions { display: flex; flex-wrap: wrap; gap: 10px; }
+.check { display: flex; gap: 10px; align-items: center; font-weight: 600; cursor: pointer; }
+.check input { width: 20px; height: 20px; accent-color: var(--amber); }
+.keys { font: 500 13px/1.7 var(--font-m); color: var(--muted); margin: 0; padding-left: 18px; }
+#s-over .dialog h2 { color: var(--danger); }
+
+/* hall of fame */
+#s-hof { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; justify-items: center; gap: 12px; background: rgba(20,12,4,.35); }
+#hof-cert { max-width: min(900px, 100%); max-height: 100%; min-height: 0; border-radius: 6px; box-shadow: 0 30px 60px -20px rgba(0,0,0,.7); }
+.hof-bar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: center; padding: 14px 16px; width: min(900px, 100%); }
+.hof-bar label { flex: 1 1 260px; display: grid; gap: 4px; font: 700 12px var(--font-m); letter-spacing: .1em; color: var(--muted); }
+
+/* build */
+.build-tl { position: absolute; top: max(16px, env(safe-area-inset-top, 0px)); right: 16px; padding: 18px 20px; width: min(360px, calc(100% - 32px)); display: grid; gap: 10px; }
+.parts { display: grid; gap: 6px; }
+.parts div { display: flex; justify-content: space-between; gap: 10px; padding: 8px 12px; border-radius: 10px; background: rgba(0,0,0,.3); }
+.parts small { font: 700 12px var(--font-m); letter-spacing: .14em; color: var(--build); }
+#drawer-btns { display: flex; gap: 8px; flex-wrap: wrap; }
+#drawer-btns button { font-family: var(--font-m); font-size: 13px; letter-spacing: .1em; padding: 10px 12px; background: #8a6340; border-color: #b08a5a; }
+#drawer-btns button.on { background: #d8b46a; color: #2a1a08; }
+#speech { position: absolute; transform: translate(-30%, -100%); background: #fffaf0; color: #2a2218; font: 600 17px/1.35 var(--font-b); padding: 14px 18px; border-radius: 16px; max-width: 280px; box-shadow: 0 10px 30px -10px rgba(0,0,0,.5); }
+#speech::after { content: ''; position: absolute; left: 26%; bottom: -12px; border: 12px solid transparent; border-top-color: #fffaf0; border-bottom: 0; }
+.build-bottom { position: absolute; left: 16px; right: 16px; bottom: max(16px, env(safe-area-inset-bottom, 0px)); display: flex; justify-content: center; }
+#tray { width: min(1120px, 100%); padding: 16px; background: rgba(60,40,22,.82); border-color: #b08a5a; }
+.tray-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+#tray-cards { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 8px; }
+.part { display: grid; gap: 6px; padding: 8px; border-radius: 12px; background: #2a2018; border: 1px solid rgba(255,230,180,.15); text-align: center; color: #f2dcaa; font: 600 13px var(--font-b); }
+.part canvas { width: 100%; height: auto; }
+.part.on { border: 2px solid #ffd36a; background: #4a3a22; }
+#build-info { width: min(1120px, 100%); padding: 16px 20px; display: grid; grid-template-columns: minmax(0, 1.1fr) auto minmax(0, 1fr) auto; gap: 18px; align-items: center; }
+#build-info label { display: grid; gap: 6px; font: 700 12px var(--font-m); letter-spacing: .12em; color: #e8c87a; }
+.gauge { width: 96px; height: 96px; border-radius: 50%; display: grid; place-items: center; background: conic-gradient(#ffc35a calc(var(--p) * 1%), rgba(255,255,255,.12) 0); position: relative; }
+.gauge::before { content: ''; position: absolute; inset: 10px; border-radius: 50%; background: #241c14; }
+.gauge b { position: relative; font: 800 22px var(--font-d); }
+#surv-why { white-space: pre-line; font-size: 15px; margin: 4px 0 0; }
+.build-actions { display: grid; gap: 8px; }
+
+/* print */
+#s-print { background: var(--paper); color: var(--paper-ink); display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr) minmax(0, 0.8fr); gap: 18px; overflow: auto; }
+#s-print button { color: var(--paper-ink); background: #fffdf8; border-color: #d8cfbe; }
+#s-print button.on { background: var(--paper-ink); color: #fbf8f2; border-color: var(--paper-ink); }
+#s-print button.amber { background: #d98a2b; color: #fff; border-color: transparent; }
+.sheet-panel { background: #fbf8f2; border: 1px solid #e2d9c8; border-radius: 20px; padding: 18px; display: grid; gap: 12px; align-content: start; min-width: 0; }
+.sheet-panel .eyebrow { color: var(--paper-muted); }
+#pick-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.pic { display: grid; gap: 4px; padding: 6px; border-radius: 12px; background: #f2eee6; border: 1.5px solid transparent; font: 600 12px var(--font-b); color: var(--paper-ink); text-align: center; }
+#s-print .pic { background: #f2eee6; color: var(--paper-ink); border-color: transparent; padding: 6px; }
+#s-print .pic.on { background: #f3e2c2; border-color: #d98a2b; color: var(--paper-ink); }
+.pic img { width: 100%; height: auto; border-radius: 8px; background: #fff; }
+.preview { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; align-content: center; min-height: 0; padding: 8px; }
+.preview img { max-width: 100%; max-height: calc(100vh - 140px); box-shadow: 0 20px 40px -18px rgba(60,45,25,.45); background: #fff; }
+.preview.poster { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+.preview.poster img { max-height: calc(50vh - 80px); width: 100%; object-fit: contain; }
+.opt { display: grid; gap: 8px; }
+.opt .row { display: flex; flex-wrap: wrap; gap: 8px; }
+.print-title { font: 800 26px var(--font-d); letter-spacing: .06em; }
+.note { font: 500 13px var(--font-b); color: var(--paper-muted); margin: 0; }
+
+/* misc */
+#toast { position: absolute; left: 50%; bottom: 90px; transform: translateX(-50%); padding: 12px 18px; z-index: 5; }
+#fade { position: absolute; inset: 0; background: #000; opacity: 0; pointer-events: none; transition: opacity .25s; }
+#fade.on { opacity: 1; }
+#savebox { position: absolute; inset: 0; background: rgba(10,8,6,.86); display: grid; place-items: center; padding: 16px; pointer-events: auto; z-index: 6; }
+#savebox .panel { width: min(900px, 100%); max-height: 100%; overflow: auto; padding: 22px; display: grid; gap: 12px; }
+#savebox-pages { display: flex; flex-wrap: wrap; gap: 10px; }
+#savebox-pages img { width: min(260px, 45%); height: auto; background: #fff; }
+#btn-mute { display: none; position: absolute; right: 16px; top: max(16px, env(safe-area-inset-top, 0px)); font: 700 12px var(--font-m); letter-spacing: .08em; padding: 10px 12px; pointer-events: auto; background: rgba(18,18,14,.55); z-index: 4; }
+
+body[data-state=title] #btn-mute, body[data-state=choose] #btn-mute { display: block; }
+@media (max-width: 860px) {
+  #s-print { grid-template-columns: minmax(0, 1fr); }
+  #build-info { grid-template-columns: minmax(0, 1fr) auto; }
+  #tray-cards { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .hud-tc { top: 96px; left: 16px; transform: none; padding: 8px 12px; }
+  .hud-tc .row { font-size: 11px; }
+  #hud-steps i { width: 22px; height: 5px; }
+  #hud-exit { top: 150px; left: 16px; transform: none; }
+  .hud-tl { padding: 8px 12px 8px 8px; }
+  .hud-tl img { width: 48px; height: 48px; }
+  .choose-desc { display: none; }
+  #speech { max-width: 200px; font-size: 14px; }
+}
+@media (max-height: 520px) {
+  #hud-hint { bottom: auto; top: 96px; left: auto; right: 16px; transform: none; max-width: 48%; font-size: 14px; padding: 10px 14px; }
+  .menu button { padding: 12px 20px; min-width: 180px; }
+}
+@media (prefers-reduced-motion: reduce) { #fade, .loadbar i, .calbar i { transition: none; } }
+</style>
+
+<div id="app">
+  <canvas id="gl" aria-label="Sauria game view"></canvas>
+  <div id="ui">
+    <section id="s-loading" class="screen">
+      <div class="load">
+        <div class="logo" style="font-size:clamp(44px,9vw,96px)">SAURIA</div>
+        <div class="loadbar"><i id="loadbar"></i></div>
+        <p id="loadtxt" class="eyebrow">Loading…</p>
+      </div>
+    </section>
+
+    <section id="s-title" class="screen" hidden>
+      <div class="title-top">
+        <h1 class="logo">SAURIA</h1>
+        <p class="sub">A modern remake of Designasaurus</p>
+      </div>
+      <div style="display:grid;gap:18px;justify-items:center">
+        <div class="menu">
+          <button id="go-walk" type="button"><svg viewBox="0 0 24 24" fill="#93cc72" aria-hidden="true"><ellipse cx="12" cy="16" rx="3.5" ry="4.5"/><path d="M12 12V3M11 13 5 5M13 13l6-8" stroke="#93cc72" stroke-width="3" stroke-linecap="round"/></svg>Walk Dino</button>
+          <button id="go-build" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 18 18 6" stroke="#6cc8ec" stroke-width="4.5" stroke-linecap="round"/><circle cx="4" cy="17" r="3" fill="#6cc8ec"/><circle cx="7" cy="20" r="3" fill="#6cc8ec"/><circle cx="17" cy="4" r="3" fill="#6cc8ec"/><circle cx="20" cy="7" r="3" fill="#6cc8ec"/></svg>Build Dino</button>
+          <button id="go-print" type="button"><svg viewBox="0 0 24 24" fill="#f0aa4a" aria-hidden="true"><rect x="6" y="2" width="12" height="5"/><rect x="2" y="8" width="20" height="9" rx="2.5"/><rect x="6" y="13" width="12" height="9"/></svg>Print Dino</button>
+        </div>
+        <p class="controls-note">Your dinosaur walks toward the mouse pointer (or your finger). Arrow keys and WASD work too. Right-drag or Q/E turns the camera, the wheel zooms, Esc pauses.</p>
+      </div>
+    </section>
+
+    <section id="s-choose" class="screen" hidden>
+      <div class="panel choose-head">
+        <p class="eyebrow">Walk Dino</p>
+        <h2 class="display">Choose a dinosaur</h2>
+        <p>Walk it through five ecosystems. Keep its calories up, and don’t get eaten.</p>
+      </div>
+      <p class="panel choose-desc" id="choose-desc"></p>
+      <div class="choose-bottom">
+        <div class="panel" style="max-width:100%;min-width:0"><div id="choose-list" role="group" aria-label="Dinosaurs"></div></div>
+        <div class="panel choose-actions">
+          <div class="seg" id="skill" role="group" aria-label="Skill level"><span class="seg-label">SKILL</span><button type="button" data-v="1">1</button><button type="button" data-v="2">2</button><button type="button" data-v="3">3</button></div>
+          <button id="choose-back" type="button">Back</button>
+          <button id="choose-start" class="primary" type="button">Start walking</button>
+        </div>
+      </div>
+    </section>
+
+    <section id="s-hud" class="screen" hidden>
+      <div class="panel hud-tl">
+        <img id="hud-portrait" alt="">
+        <div class="stack">
+          <b id="hud-name">Stegosaurus</b>
+          <div class="cal"><small>CALORIES</small><div class="calbar"><i id="hud-cal"></i></div><span id="hud-calnum">80</span></div>
+        </div>
+      </div>
+      <div class="panel hud-tc"><div class="row"><span id="hud-area">Forest</span> · <span id="hud-screen">Screen 1 of 5</span></div><div id="hud-steps"><i></i><i></i><i></i><i></i><i></i></div></div>
+      <div class="hud-tr"><button id="btn-pause" type="button">Pause</button></div>
+      <div id="hud-exit" class="panel" hidden></div>
+      <div id="hud-hint" class="panel" role="status" hidden></div>
+      <div id="loadmsg" class="panel" hidden>Loading the next ecosystem…</div>
+    </section>
+
+    <section id="s-pause" class="screen" hidden>
+      <div class="panel dialog" role="dialog" aria-label="Paused">
+        <h2 class="display">Paused</h2>
+        <label class="check"><input id="hold-walk" type="checkbox"> Walk only while holding the mouse button</label>
+        <label class="check"><input id="fast-gfx" type="checkbox"> Fast graphics (no shadows, lower resolution)</label>
+        <ul class="keys">
+          <li>Move the pointer: your dinosaur walks toward it</li>
+          <li>WASD or arrow keys: walk</li>
+          <li>Right-drag, or Q and E: turn the camera · wheel: zoom</li>
+          <li>Plant-eaters: stop with the mouth at a bush to eat</li>
+          <li>Walk off the far end to reach the next screen, or back to escape</li>
+        </ul>
+        <div class="actions"><button id="pause-resume" class="primary" type="button">Resume</button><button id="pause-sound" type="button" aria-pressed="false">Sound on</button><button id="pause-quit" type="button">Quit to title</button></div>
+      </div>
+    </section>
+
+    <section id="s-over" class="screen" hidden>
+      <div class="panel dialog" role="dialog" aria-labelledby="over-title">
+        <h2 id="over-title" class="display">Eaten!</h2>
+        <p id="over-text"></p>
+        <div class="actions"><button id="over-retry" class="primary" type="button">Try again</button><button id="over-choose" type="button">Choose another dinosaur</button><button id="over-home" type="button">Title</button></div>
+      </div>
+    </section>
+
+    <section id="s-hof" class="screen" hidden>
+      <h2 class="display" style="text-shadow:0 2px 14px rgba(0,0,0,.6)">All five ecosystems crossed</h2>
+      <img id="hof-cert" alt="Dinosaur Hall of Fame certificate">
+      <div class="panel hof-bar">
+        <label for="hof-name">YOUR NAME FOR THE CERTIFICATE<input id="hof-name" type="text" maxlength="28" autocomplete="off"></label>
+        <button id="hof-save" class="amber" type="button">Save certificate (PDF)</button>
+        <button id="hof-again" type="button">Walk again</button>
+        <button id="hof-home" type="button">Title</button>
+      </div>
+    </section>
+
+    <section id="s-build" class="screen" hidden>
+      <div id="speech">Open a drawer to choose a head, a body or a tail.</div>
+      <div class="panel build-tl">
+        <p class="eyebrow" style="margin:0">Museum of Natural History</p>
+        <h2 class="display">Build Dino</h2>
+        <div class="parts"><div><small>HEAD</small><span id="part-head"></span></div><div><small>BODY</small><span id="part-body"></span></div><div><small>TAIL</small><span id="part-tail"></span></div></div>
+        <div id="drawer-btns" role="group" aria-label="Filing cabinet drawers"><button type="button">HEADS</button><button type="button">BODIES</button><button type="button">TAILS</button></div>
+        <p class="eyebrow" style="margin:0">Drag to turn the model</p>
+      </div>
+      <div class="build-bottom">
+        <div id="tray" class="panel" hidden>
+          <div class="tray-head"><b id="tray-title">Heads drawer</b><button id="tray-close" type="button">Close drawer</button></div>
+          <div id="tray-cards"></div>
+        </div>
+        <div id="build-info" class="panel">
+          <label for="build-name">NAME YOUR DINOSAUR<input id="build-name" type="text" maxlength="28" autocomplete="off"></label>
+          <div class="gauge" id="surv-ring" style="--p:60"><b id="surv-pct">60%</b></div>
+          <div style="min-width:0"><p class="eyebrow" style="margin:0;color:#e8c87a">Chance of survival</p><p id="surv-why"></p></div>
+          <div class="build-actions"><button id="build-walk" class="primary" type="button">Walk it</button><button id="build-print" class="amber" type="button">Print it</button><button id="build-back" type="button">Title</button></div>
+        </div>
+      </div>
+    </section>
+
+    <section id="s-print" class="screen" hidden>
+      <div class="sheet-panel">
+        <div class="print-title">PRINT DINO</div>
+        <p class="eyebrow" style="margin:0">Choose a picture</p>
+        <div id="pick-grid" role="group" aria-label="Pictures"></div>
+        <button id="pick-more" type="button">+ 6 more pictures</button>
+      </div>
+      <div id="preview" class="preview" aria-label="Print preview"></div>
+      <div class="sheet-panel">
+        <div class="opt"><p class="eyebrow" style="margin:0">Print type</p><div class="row" id="ptype" role="group" aria-label="Print type"><button type="button" data-v="regular">Regular</button><button type="button" data-v="poster">Poster</button><button type="button" data-v="tshirt">T-shirt transfer</button></div>
+          <p class="note">Regular is one page with facts. Poster spreads one big picture over 4 pages. T-shirt transfer prints mirror-image so it reads right once ironed on.</p></div>
+        <div class="opt"><p class="eyebrow" style="margin:0">Style</p><div class="row" id="pstyle" role="group" aria-label="Style"><button type="button" data-v="line">Line art to colour in</button><button type="button" data-v="colour">Full colour</button></div></div>
+        <button id="print-go" class="amber" type="button">Save PDF to print</button>
+        <button id="print-back" type="button">Back to title</button>
+      </div>
+    </section>
+
+    <div id="toast" class="panel" role="status" hidden></div>
+    <div id="savebox" hidden>
+      <div class="panel">
+        <h2 class="display">Your printable pages</h2>
+        <p style="margin:0;color:var(--muted)">Saving files isn’t available in this view. Right-click or long-press a page to save it as an image, then print it.</p>
+        <div id="savebox-pages"></div>
+        <div class="actions"><button id="savebox-close" type="button">Close</button></div>
+      </div>
+    </div>
+  </div>
+  <div id="fade"></div>
+  <button id="btn-mute" type="button" aria-pressed="false">Sound on</button>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+/*__SCRIPTS__*/
+</script>
